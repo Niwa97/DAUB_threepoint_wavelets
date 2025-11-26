@@ -1,64 +1,90 @@
 import numpy as np
 from scipy.optimize import minimize, Bounds
-#Putting f = 1
+
+N_MAG = np.sqrt(1.0 / 3.0)
 
 def objective(X):
-    """Calculates the sum of squares of the coefficients [a, b, c, d, e]."""
-    return np.sum(X**2)
+    a, b, c, d, e, f = X
+    L1 = -a + b - c + d - e + f
+    L2 = -5*a + 4*b - 3*c + 2*d - e
+    return L1**2 + L2**2
 
+# -a + b - c + d - e + f = 0
+def constraint_l1(X):
+    a, b, c, d, e, f = X
+    return -a + b - c + d - e + f
 
-def constraint_c3(X):
-    """Constraint C3: -a + b - c + d - e + 1 = 0"""
-    a, b, c, d, e = X
-    return -a + b - c + d - e + 1
-
-def constraint_c4(X):
-    """Constraint C4: -5a + 4b - 3c + 2d - e = 0"""
-    a, b, c, d, e = X
+# -5a + 4b - 3c + 2d - e = 0
+def constraint_l2(X):
+    a, b, c, d, e, f = X
     return -5*a + 4*b - 3*c + 2*d - e
 
+def constraint_col_norm_1(X):
+    a, _, _, _, _, f = X
+    return 2*a**2 + f**2 - 1.0
+
+def constraint_col_norm_2(X):
+    _, b, _, _, e, _ = X
+    return 2*b**2 + e**2 - 1.0
+
+def constraint_col_norm_3(X):
+    _, _, c, d, _, _ = X
+    return 2*c**2 + d**2 - 1.0
+
+def constraint_a_plus_f_zero(X):
+    return X[0] + X[5]
+
 constraints = [
-    {'type': 'eq', 'fun': constraint_c3},
-    {'type': 'eq', 'fun': constraint_c4}
+    {'type': 'eq', 'fun': constraint_l1},
+    {'type': 'eq', 'fun': constraint_l2},
+    {'type': 'eq', 'fun': constraint_col_norm_1},
+    {'type': 'eq', 'fun': constraint_col_norm_2},
+    {'type': 'eq', 'fun': constraint_col_norm_3},
+    {'type': 'eq', 'fun': constraint_a_plus_f_zero},
 ]
 
-x0 = np.array([1.0, 1.0, 1.0, 1.0, 1.0])
+x0 = np.array([N_MAG, N_MAG, N_MAG, N_MAG, N_MAG, -N_MAG])
+
+bounds = Bounds([-1.0] * 6, [1.0] * 6)
 
 result = minimize(
     objective,
     x0,
-    method='SLSQP',
+    method='trust-constr',
     constraints=constraints,
-    tol=1e-10
+    bounds=bounds,
+    tol=1e-15,
+    options={'maxiter': 5000}
 )
 
 if not result.success:
-    print("\nOptimization failed")
+    print("Optimization failed.")
     print("Reason:", result.message)
-    exit()
+    V = result.x
+else:
+    V = result.x
 
-X_optimal = result.x
-a, b, c, d, e = X_optimal
-f = 1.0
-
-V = np.array([a, b, c, d, e, f])
-print("Numerical Estimation Results")
+a, b, c, d, e, f = V
+print("\n--- Numerical Estimation Results ---")
 print(f"Optimization Status: {result.message}")
-print(f"Minimized Sum of Squares (a^2+...+e^2): {result.fun:.6f}")
+print(f"Total Residual Error (Objective Value): {result.fun:.10e} (Expected near 0)")
+print(f"Required Magnitude (1/sqrt(3)): {N_MAG:.10f} (Approximate if a=-f etc.)")
 print("Coefficients found:")
-print(f"a = {a:.6f}")
-print(f"b = {b:.6f}")
-print(f"c = {c:.6f}")
-print(f"d = {d:.6f}")
-print(f"e = {e:.6f}")
-print(f"f = {f:.6f} (Fixed)")
+print(f"a = {a:.10f}")
+print(f"b = {b:.10f}")
+print(f"c = {c:.10f}")
+print(f"d = {d:.10f}")
+print(f"e = {e:.10f}")
+print(f"f = {f:.10f}")
 
-
-print("Constraint Verification")
-C3_check = constraint_c3(X_optimal)
-C4_check = constraint_c4(X_optimal)
-print(f"C3 Check (-a + b - c + d - e + f): {C3_check:.2e}")
-print(f"C4 Check (-5a + 4b - 3c + 2d - e): {C4_check:.2e}")
+L1_check = constraint_l1(V)
+L2_check = constraint_l2(V)
+print(f"L1 Check (-a + b - c + d - e + f): {L1_check:.2e}")
+print(f"L2 Check (-5a + 4b - 3c + 2d - e): {L2_check:.2e}")
+print(f"Norm Check 1: {constraint_col_norm_1(V):.2e}")
+print(f"Norm Check 2: {constraint_col_norm_2(V):.2e}")
+print(f"Norm Check 3: {constraint_col_norm_3(V):.2e}")
+print(f"Rank check: {constraint_a_plus_f_zero(V):.2e}")
 
 M = np.array([
     [V[0], V[1], V[2], V[3], V[4], V[5]],
@@ -68,14 +94,17 @@ M = np.array([
 
 rank_M = np.linalg.matrix_rank(M)
 
-print("Matrix Rank Verification")
 print(np.round(M, 10))
-print(f"Calculated Rank(M): {rank_M}")
 
-if rank_M == 3:
-    print("The matrix M has the rank equal to 3")
+column_norms = np.linalg.norm(M, axis=0)
+print("Column Norms:")
+print(np.round(column_norms, 10))
+
+
+if rank_M == 3 and np.allclose(column_norms, 1.0):
+    print("All constraints are satisfied.")
 else:
-    print(f"The matrix M has a rank of {rank_M}")
-
-total_sum_sq = np.sum(V**2)
-print(f"Total sum of squares (a^2 + ... + f^2): {total_sum_sq:.6f}")
+    if rank_M != 3:
+        print(f"The matrix M has a rank of {rank_M}.")
+    if not np.allclose(column_norms, 1.0):
+        print("One or more column norms are not close to 1.0.")
