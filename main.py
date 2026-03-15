@@ -47,14 +47,14 @@ x0 = np.array([N_MAG, N_MAG, N_MAG, N_MAG, N_MAG, -N_MAG]) + np.random.uniform(-
 bounds = Bounds([-1.0] * 6, [1.0] * 6)
 
 result = minimize(
-    objective,
-    x0,
-    method='trust-constr',
-    constraints=constraints,
-    bounds=bounds,
-    tol=1e-15,
-    options={'maxiter': 5000}
-)
+            objective,
+            x0,
+            method='trust-constr',
+            constraints=constraints,
+            bounds=bounds,
+            tol=1e-15,
+            options={'maxiter': 5000}
+            )
 
 if not result.success:
     print("Optimization failed.")
